@@ -1,4 +1,4 @@
-export CUDA_VISIBLE_DEVICES=7
+
 
 python -u run.py \
   --task_name anomaly_detection \

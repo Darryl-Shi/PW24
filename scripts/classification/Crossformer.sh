@@ -1,4 +1,3 @@
-export CUDA_VISIBLE_DEVICES=3
 
 model_name=Crossformer
 
