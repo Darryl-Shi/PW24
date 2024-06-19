@@ -12,6 +12,7 @@ import time
 import warnings
 import numpy as np
 import pandas
+import wandb
 
 warnings.filterwarnings('ignore')
 
@@ -19,6 +20,27 @@ warnings.filterwarnings('ignore')
 class Exp_Short_Term_Forecast(Exp_Basic):
     def __init__(self, args):
         super(Exp_Short_Term_Forecast, self).__init__(args)
+        self.wandb = wandb.init(project="PW-24-Short-Term-Forecasting", config=args, name='{}_{}_{}_{}_ft{}_sl{}_ll{}_pl{}_dm{}_nh{}_el{}_dl{}_df{}_expand{}_dc{}_fc{}_eb{}_dt{}_{}'.format(
+                args.task_name,
+                args.model_id,
+                args.model,
+                args.data,
+                args.features,
+                args.seq_len,
+                args.label_len,
+                args.pred_len,
+                args.d_model,
+                args.n_heads,
+                args.e_layers,
+                args.d_layers,
+                args.d_ff,
+                args.expand,
+                args.d_conv,
+                args.factor,
+                args.embed,
+                args.distil,
+                args.des)
+)
 
     def _build_model(self):
         if self.args.data == 'm4':
@@ -95,6 +117,7 @@ class Exp_Short_Term_Forecast(Exp_Basic):
                 loss_value = criterion(batch_x, self.args.frequency_map, outputs, batch_y, batch_y_mark)
                 loss_sharpness = mse((outputs[:, 1:, :] - outputs[:, :-1, :]), (batch_y[:, 1:, :] - batch_y[:, :-1, :]))
                 loss = loss_value  # + loss_sharpness * 1e-5
+                self.wandb.log({"iteration_loss": loss})
                 train_loss.append(loss.item())
 
                 if (i + 1) % 100 == 0:
@@ -110,7 +133,9 @@ class Exp_Short_Term_Forecast(Exp_Basic):
 
             print("Epoch: {} cost time: {}".format(epoch + 1, time.time() - epoch_time))
             train_loss = np.average(train_loss)
-            vali_loss = self.vali(train_loader, vali_loader, criterion)
+            self.wandb.log({"epoch_loss": train_loss})
+            vali_loss, val_accuracy = self.vali(vali_data, vali_loader, criterion)
+            self.wandb.log({"vali_loss": vali_loss, "vali_accuracy": val_accuracy})
             test_loss = vali_loss
             print("Epoch: {0}, Steps: {1} | Train Loss: {2:.7f} Vali Loss: {3:.7f} Test Loss: {4:.7f}".format(
                 epoch + 1, train_steps, train_loss, vali_loss, test_loss))
@@ -118,8 +143,12 @@ class Exp_Short_Term_Forecast(Exp_Basic):
             if early_stopping.early_stop:
                 print("Early stopping")
                 break
-
-            adjust_learning_rate(model_optim, epoch + 1, self.args)
+            
+            new_lr = adjust_learning_rate(model_optim, epoch + 1, self.args)
+            try:
+                self.wandb.log({"learning_rate": new_lr})
+            except Exception:
+                pass
 
         best_model_path = path + '/' + 'checkpoint.pth'
         self.model.load_state_dict(torch.load(best_model_path))

@@ -1,5 +1,6 @@
 import os
 import torch
+import wandb
 from models import Autoformer, Transformer, TimesNet, Nonstationary_Transformer, DLinear, FEDformer, \
     Informer, LightTS, Reformer, ETSformer, Pyraformer, PatchTST, MICN, Crossformer, FiLM, iTransformer, \
     Koopa, TiDE, FreTS, TimeMixer, TSMixer, SegRNN, MambaSimple, Mamba
@@ -36,7 +37,7 @@ class Exp_Basic(object):
         }
         self.device = self._acquire_device()
         self.model = self._build_model().to(self.device)
-
+        
     def _build_model(self):
         raise NotImplementedError
         return None

@@ -13,13 +13,34 @@ import os
 import time
 import warnings
 import numpy as np
-
+import wandb
 warnings.filterwarnings('ignore')
 
 
 class Exp_Anomaly_Detection(Exp_Basic):
     def __init__(self, args):
         super(Exp_Anomaly_Detection, self).__init__(args)
+        self.wandb = wandb.init(project="PW-24-Anomaly-Detection", config=args, name='{}_{}_{}_{}_ft{}_sl{}_ll{}_pl{}_dm{}_nh{}_el{}_dl{}_df{}_expand{}_dc{}_fc{}_eb{}_dt{}_{}'.format(
+        args.task_name,
+        args.model_id,
+        args.model,
+        args.data,
+        args.features,
+        args.seq_len,
+        args.label_len,
+        args.pred_len,
+        args.d_model,
+        args.n_heads,
+        args.e_layers,
+        args.d_layers,
+        args.d_ff,
+        args.expand,
+        args.d_conv,
+        args.factor,
+        args.embed,
+        args.distil,
+        args.des)
+)
 
     def _build_model(self):
         model = self.model_dict[self.args.model].Model(self.args).float()
@@ -94,6 +115,7 @@ class Exp_Anomaly_Detection(Exp_Basic):
                 f_dim = -1 if self.args.features == 'MS' else 0
                 outputs = outputs[:, :, f_dim:]
                 loss = criterion(outputs, batch_x)
+                self.wandb.log({"iteration_loss": loss})
                 train_loss.append(loss.item())
 
                 if (i + 1) % 100 == 0:
@@ -109,8 +131,11 @@ class Exp_Anomaly_Detection(Exp_Basic):
 
             print("Epoch: {} cost time: {}".format(epoch + 1, time.time() - epoch_time))
             train_loss = np.average(train_loss)
-            vali_loss = self.vali(vali_data, vali_loader, criterion)
-            test_loss = self.vali(test_data, test_loader, criterion)
+            self.wandb.log({"epoch_loss": train_loss})
+            vali_loss, val_accuracy = self.vali(vali_data, vali_loader, criterion)
+            self.wandb.log({"vali_loss": vali_loss, "vali_accuracy": val_accuracy})
+            test_loss, test_accuracy = self.vali(test_data, test_loader, criterion)
+            self.wandb.log({"test_loss": test_loss, "test_accuracy": test_accuracy})
 
             print("Epoch: {0}, Steps: {1} | Train Loss: {2:.7f} Vali Loss: {3:.7f} Test Loss: {4:.7f}".format(
                 epoch + 1, train_steps, train_loss, vali_loss, test_loss))
@@ -118,7 +143,11 @@ class Exp_Anomaly_Detection(Exp_Basic):
             if early_stopping.early_stop:
                 print("Early stopping")
                 break
-            adjust_learning_rate(model_optim, epoch + 1, self.args)
+            new_lr = adjust_learning_rate(model_optim, epoch + 1, self.args)
+            try:
+                self.wandb.log({"learning_rate": new_lr})
+            except Exception:
+                pass
 
         best_model_path = path + '/' + 'checkpoint.pth'
         self.model.load_state_dict(torch.load(best_model_path))
