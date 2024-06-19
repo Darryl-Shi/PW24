@@ -134,8 +134,8 @@ class Exp_Short_Term_Forecast(Exp_Basic):
             print("Epoch: {} cost time: {}".format(epoch + 1, time.time() - epoch_time))
             train_loss = np.average(train_loss)
             self.wandb.log({"epoch_loss": train_loss})
-            vali_loss, val_accuracy = self.vali(vali_data, vali_loader, criterion)
-            self.wandb.log({"vali_loss": vali_loss, "vali_accuracy": val_accuracy})
+            vali_loss = self.vali(vali_data, vali_loader, criterion)
+            self.wandb.log({"vali_loss": vali_loss})
             test_loss = vali_loss
             print("Epoch: {0}, Steps: {1} | Train Loss: {2:.7f} Vali Loss: {3:.7f} Test Loss: {4:.7f}".format(
                 epoch + 1, train_steps, train_loss, vali_loss, test_loss))
