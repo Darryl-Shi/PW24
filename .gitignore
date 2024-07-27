@@ -167,3 +167,5 @@ cython_debug/
 *.npy
 *.pdf
 wandb/
+pw/tb_logs
+pw/lightning_logs
