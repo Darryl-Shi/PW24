@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.functional as F
 import lightning.pytorch as pyl
 import numpy as np
+import copy
 from lightning.pytorch.callbacks import EarlyStopping
 from lightning.pytorch.loggers import TensorBoardLogger
 from argparse import Namespace
@@ -119,29 +120,10 @@ for config in configs:
     model = TimesNet(config)
     pretrained_model = TimesNet(config)
 
-    (train_set, train_loader) = (get_data(config, 'train'))
-    earlystopping = EarlyStopping('val_loss')
-    # logger = TensorBoardLogger("tb_logs", name='{}_{}_{}_{}_ft{}_sl{}_ll{}_pl{}_dm{}_nh{}_el{}_dl{}_df{}_expand{}_dc{}_fc{}_eb{}_dt{}_{}'.format(
-    #             config.task_name,
-    #             config.model_id,
-    #             config.model,
-    #             config.data,
-    #             config.features,
-    #             config.seq_len,
-    #             config.label_len,
-    #             config.pred_len,
-    #             config.d_model,
-    #             config.n_heads,
-    #             config.e_layers,
-    #             config.d_layers,
-    #             config.d_ff,
-    #             config.expand,
-    #             config.d_conv,
-    #             config.factor,
-    #             config.embed,
-    #             config.distil,
-    #             config.des))
-    wandb_logger = WandbLogger(log_model="all", project="PW24", name='{}_{}_{}_{}_ft{}_sl{}_ll{}_pl{}_dm{}_nh{}_el{}_dl{}_df{}_expand{}_dc{}_fc{}_eb{}_dt{}_{}'.format(
+    (train_set_o, _) = (get_data(config, 'train'))
+    earlystopping = EarlyStopping('val_loss', patience=3)
+    earlystopping_ft = EarlyStopping('val_loss', patience=3)
+    logger = TensorBoardLogger("tb_logs", name='{}_{}_{}_{}_ft{}_sl{}_ll{}_pl{}_dm{}_nh{}_el{}_dl{}_df{}_expand{}_dc{}_fc{}_eb{}_dt{}_{}'.format(
                 config.task_name,
                 config.model_id,
                 config.model,
@@ -161,23 +143,103 @@ for config in configs:
                 config.embed,
                 config.distil,
                 config.des))
+    ftlogger = TensorBoardLogger("tb_logs", name='pretrained_{}_{}_{}_{}_ft{}_sl{}_ll{}_pl{}_dm{}_nh{}_el{}_dl{}_df{}_expand{}_dc{}_fc{}_eb{}_dt{}_{}'.format(
+                config.task_name,
+                config.model_id,
+                config.model,
+                config.data,
+                config.features,
+                config.seq_len,
+                config.label_len,
+                config.pred_len,
+                config.d_model,
+                config.n_heads,
+                config.e_layers,
+                config.d_layers,
+                config.d_ff,
+                config.expand,
+                config.d_conv,
+                config.factor,
+                config.embed,
+                config.distil,
+                config.des))
+    # wandb_logger = WandbLogger(log_model="all", project="PW24", name='{}_{}_{}_{}_ft{}_sl{}_ll{}_pl{}_dm{}_nh{}_el{}_dl{}_df{}_expand{}_dc{}_fc{}_eb{}_dt{}_{}'.format(
+    #             config.task_name,
+    #             config.model_id,
+    #             config.model,
+    #             config.data,
+    #             config.features,
+    #             config.seq_len,
+    #             config.label_len,
+    #             config.pred_len,
+    #             config.d_model,
+    #             config.n_heads,
+    #             config.e_layers,
+    #             config.d_layers,
+    #             config.d_ff,
+    #             config.expand,
+    #             config.d_conv,
+    #             config.factor,
+    #             config.embed,
+    #             config.distil,
+    #             config.des))
+    # pretrain_wandb_logger = WandbLogger(log_model="all", project="PW24", name='pretrained_{}_{}_{}_{}_ft{}_sl{}_ll{}_pl{}_dm{}_nh{}_el{}_dl{}_df{}_expand{}_dc{}_fc{}_eb{}_dt{}_{}'.format(
+    #             config.task_name,
+    #             config.model_id,
+    #             config.model,
+    #             config.data,
+    #             config.features,
+    #             config.seq_len,
+    #             config.label_len,
+    #             config.pred_len,
+    #             config.d_model,
+    #             config.n_heads,
+    #             config.e_layers,
+    #             config.d_layers,
+    #             config.d_ff,
+    #             config.expand,
+    #             config.d_conv,
+    #             config.factor,
+    #             config.embed,
+    #             config.distil,
+    #             config.des))
 
     
     # use 20% of training data for validation
-    train_set_size = int(len(train_set) * 0.8)
-    valid_set_size = len(train_set) - train_set_size
+    train_set_size = int(len(train_set_o) * 0.8)
+    valid_set_size = len(train_set_o) - train_set_size
 
     # split the train set into two
     seed = torch.Generator().manual_seed(42)
-    train_set, valid_set = torch.utils.data.random_split(train_set, [train_set_size, valid_set_size], generator=seed)
+    train_set, valid_set = torch.utils.data.random_split(train_set_o, [train_set_size, valid_set_size], generator=seed)
+    fttrain_set, ftvalid_set = torch.utils.data.random_split(train_set_o, [train_set_size, valid_set_size], generator=seed)
+    train_loader = torch.utils.data.DataLoader(
+            train_set,
+            batch_size=config.batch_size,
+            shuffle=False,
+            num_workers=config.num_workers,
+            drop_last=False)
     test_loader = torch.utils.data.DataLoader(
             valid_set,
             batch_size=config.batch_size,
             shuffle=True,
             num_workers=config.num_workers,
             drop_last=False)
-    
-    pretrain_dataset = StockDataset(ticker="AAPL", interval="5m", period="5y", seq_len=config.seq_len, label_len=config.label_len, pred_len=config.pred_len)
+    # fttrain_loader = copy.deepcopy(train_loader)
+    # fttest_loader = copy.deepcopy(test_loader)
+    fttrain_loader = torch.utils.data.DataLoader(
+            fttrain_set,
+            batch_size=config.batch_size,
+            shuffle=False,
+            num_workers=config.num_workers,
+            drop_last=False)
+    fttest_loader = torch.utils.data.DataLoader(
+            ftvalid_set,
+            batch_size=config.batch_size,
+            shuffle=True,
+            num_workers=config.num_workers,
+            drop_last=False)
+    pretrain_dataset = StockDataset(tickers=["AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "TSLA", "JPM"], interval="5m", period="1mo", seq_len=config.seq_len, label_len=config.label_len, pred_len=config.pred_len)
     
     pretrain_loader = torch.utils.data.DataLoader(
             valid_set,
@@ -187,11 +249,11 @@ for config in configs:
             drop_last=False
     )
 
-    trainer = pyl.Trainer(callbacks=[earlystopping], max_epochs=10, logger=wandb_logger)
+    trainer = pyl.Trainer(callbacks=[earlystopping], max_epochs=10, logger=logger)
     trainer.fit(model=model, train_dataloaders=train_loader, val_dataloaders=test_loader)
 
-
+    ft_trainer = pyl.Trainer(callbacks=[earlystopping_ft], max_epochs=10, logger=ftlogger)
     pretrain_trainer = pyl.Trainer(max_epochs=3)
-    pretrain_trainer.fit(model=pretrained_model, train_loader=pretrain_loader)
-    trainer.fit(model=pretrained_model, train_loader=train_loader, val_dataloader=test_loader)
+    pretrain_trainer.fit(model=pretrained_model, train_dataloaders=pretrain_loader)
+    ft_trainer.fit(model=pretrained_model, train_dataloaders=fttrain_loader, val_dataloaders=fttest_loader)
     
