@@ -6,7 +6,9 @@ import numpy as np
 from lightning.pytorch.callbacks import EarlyStopping
 from lightning.pytorch.loggers import TensorBoardLogger
 from argparse import Namespace
+from lightning.pytorch.loggers import WandbLogger
 
+from pretrain_dataset import StockDataset
 from data_provider.data_factory import data_provider
 from data_provider.m4 import M4Meta
 
@@ -115,10 +117,31 @@ for config in configs:
     config.frequency_map = M4Meta.frequency_map[config.seasonal_patterns]
 
     model = TimesNet(config)
+    pretrained_model = TimesNet(config)
 
     (train_set, train_loader) = (get_data(config, 'train'))
     earlystopping = EarlyStopping('val_loss')
-    logger = TensorBoardLogger("tb_logs", name='{}_{}_{}_{}_ft{}_sl{}_ll{}_pl{}_dm{}_nh{}_el{}_dl{}_df{}_expand{}_dc{}_fc{}_eb{}_dt{}_{}'.format(
+    # logger = TensorBoardLogger("tb_logs", name='{}_{}_{}_{}_ft{}_sl{}_ll{}_pl{}_dm{}_nh{}_el{}_dl{}_df{}_expand{}_dc{}_fc{}_eb{}_dt{}_{}'.format(
+    #             config.task_name,
+    #             config.model_id,
+    #             config.model,
+    #             config.data,
+    #             config.features,
+    #             config.seq_len,
+    #             config.label_len,
+    #             config.pred_len,
+    #             config.d_model,
+    #             config.n_heads,
+    #             config.e_layers,
+    #             config.d_layers,
+    #             config.d_ff,
+    #             config.expand,
+    #             config.d_conv,
+    #             config.factor,
+    #             config.embed,
+    #             config.distil,
+    #             config.des))
+    wandb_logger = WandbLogger(log_model="all", project="PW24", name='{}_{}_{}_{}_ft{}_sl{}_ll{}_pl{}_dm{}_nh{}_el{}_dl{}_df{}_expand{}_dc{}_fc{}_eb{}_dt{}_{}'.format(
                 config.task_name,
                 config.model_id,
                 config.model,
@@ -138,6 +161,7 @@ for config in configs:
                 config.embed,
                 config.distil,
                 config.des))
+
     
     # use 20% of training data for validation
     train_set_size = int(len(train_set) * 0.8)
@@ -152,7 +176,22 @@ for config in configs:
             shuffle=True,
             num_workers=config.num_workers,
             drop_last=False)
-    trainer = pyl.Trainer(callbacks=[earlystopping], max_epochs=10, logger=logger)
+    
+    pretrain_dataset = StockDataset(ticker="AAPL", interval="5m", period="5y", seq_len=config.seq_len, label_len=config.label_len, pred_len=config.pred_len)
+    
+    pretrain_loader = torch.utils.data.DataLoader(
+            valid_set,
+            batch_size=config.batch_size,
+            shuffle=False,
+            num_workers=config.num_workers,
+            drop_last=False
+    )
+
+    trainer = pyl.Trainer(callbacks=[earlystopping], max_epochs=10, logger=wandb_logger)
     trainer.fit(model=model, train_dataloaders=train_loader, val_dataloaders=test_loader)
 
+
+    pretrain_trainer = pyl.Trainer(max_epochs=3)
+    pretrain_trainer.fit(model=pretrained_model, train_loader=pretrain_loader)
+    trainer.fit(model=pretrained_model, train_loader=train_loader, val_dataloader=test_loader)
     
